@@ -46,6 +46,18 @@ def generate_time_windows(num_points: int, time_range: tuple = (0, 100)):
     return [(np.random.uniform(time_range[0], time_range[1]),
              np.random.uniform(time_range[0], time_range[1]) + 2) for _ in range(num_points)]
 
+def find_optimal_depot(delivery_points: List[Tuple[float, float]]) -> Tuple[float, float]:
+    """计算最优配送中心位置（使用重心法）"""
+    x_coords = [p[0] for p in delivery_points]
+    y_coords = [p[1] for p in delivery_points]
+    return (np.mean(x_coords), np.mean(y_coords))
+
+def calculate_total_distance(depot: Tuple[float, float], 
+                           delivery_points: List[Tuple[float, float]]) -> float:
+    """计算给定配送中心位置的总距离"""
+    return sum(np.sqrt((p[0] - depot[0])**2 + (p[1] - depot[1])**2) 
+              for p in delivery_points)
+
 def plot_routes(depot: Tuple[float, float], 
                 delivery_points: List[Tuple[float, float]], 
                 routes: List[List[int]], 
@@ -55,7 +67,7 @@ def plot_routes(depot: Tuple[float, float],
                 service_times: List[float] = None):
     """绘制路线图"""
     # 根据数据范围自动调整图形大小
-    x_coords = [p[0] for p in delivery_points] + [depot[0], depot[0] + 20]
+    x_coords = [p[0] for p in delivery_points] + [depot[0]]
     y_coords = [p[1] for p in delivery_points] + [depot[1]]
     x_range = max(x_coords) - min(x_coords)
     y_range = max(y_coords) - min(y_coords)
@@ -94,7 +106,7 @@ def plot_routes(depot: Tuple[float, float],
     ax1.scatter(depot[0], depot[1], c='#FF6B6B', s=200, label='配送中心', zorder=5)
     
     # 绘制配送点
-    ax1.scatter(x_coords[:-2], y_coords[:-1], c='#4ECDC4', s=100, label='配送点', zorder=4)
+    ax1.scatter(x_coords[:-1], y_coords[:-1], c='#4ECDC4', s=100, label='配送点', zorder=4)
     
     # 计算并绘制所有点到配送中心的连线
     total_distance = 0
@@ -131,47 +143,29 @@ def plot_routes(depot: Tuple[float, float],
                             bbox=dict(boxstyle='round,pad=0.5', fc='white', alpha=0.7),
                             fontsize=8)
     
-    # 创建对照点（在配送中心右侧20单位处）
-    comparison_depot = (depot[0] + 20, depot[1])
-    comparison_circle = Circle(comparison_depot, 5, color='#2ECC71', alpha=0.2)
-    ax1.add_patch(comparison_circle)
-    ax1.scatter(comparison_depot[0], comparison_depot[1], c='#2ECC71', s=200, label='对照配送中心', zorder=5)
+    # 计算最优配送中心位置
+    optimal_depot = find_optimal_depot(delivery_points)
+    optimal_distance = calculate_total_distance(optimal_depot, delivery_points)
+    current_distance = calculate_total_distance(depot, delivery_points)
     
-    # 计算并绘制所有点到对照配送中心的连线
-    comparison_total_distance = 0
+    # 绘制最优配送中心位置
+    optimal_circle = Circle(optimal_depot, 5, color='#2ECC71', alpha=0.2)
+    ax1.add_patch(optimal_circle)
+    ax1.scatter(optimal_depot[0], optimal_depot[1], c='#2ECC71', s=200, 
+                label='理论最优配送中心', zorder=5)
+    
+    # 计算并绘制所有点到最优配送中心的连线
     for i, point in enumerate(delivery_points):
-        distance = np.sqrt((point[0] - comparison_depot[0])**2 + 
-                         (point[1] - comparison_depot[1])**2)
-        comparison_total_distance += distance
-        ax1.plot([comparison_depot[0], point[0]], [comparison_depot[1], point[1]], 
+        ax1.plot([optimal_depot[0], point[0]], [optimal_depot[1], point[1]], 
                  c='#95A5A6', alpha=0.2, linestyle='--', zorder=1)
-    
-    # 设置主图属性
-    ax1.set_title(title, fontsize=16, pad=20, fontweight='bold')
-    ax1.set_xlabel('X 坐标', fontsize=12)
-    ax1.set_ylabel('Y 坐标', fontsize=12)
-    
-    # 调整图例位置和样式
-    legend = ax1.legend(bbox_to_anchor=(1.02, 1), loc='upper left', 
-                       borderaxespad=0., frameon=True, fancybox=True, shadow=True,
-                       fontsize=10)
-    legend.get_frame().set_facecolor('white')
-    legend.get_frame().set_alpha(0.9)
-    
-    ax1.grid(True, alpha=0.3)
-    
-    # 设置坐标轴范围，留出一定边距
-    margin = 5
-    ax1.set_xlim(min(x_coords) - margin, max(x_coords) + margin)
-    ax1.set_ylim(min(y_coords) - margin, max(y_coords) + margin)
     
     # 在中间子图中添加距离统计信息
     ax2.axis('off')
     stats_text = (
-        f"原始配送中心总距离: {total_distance:.2f}\n"
-        f"对照配送中心总距离: {comparison_total_distance:.2f}\n"
-        f"距离差异: {abs(total_distance - comparison_total_distance):.2f}\n"
-        f"差异百分比: {abs(total_distance - comparison_total_distance)/total_distance*100:.2f}%"
+        f"当前配送中心总距离: {current_distance:.2f}\n"
+        f"理论最优配送中心总距离: {optimal_distance:.2f}\n"
+        f"距离差异: {abs(current_distance - optimal_distance):.2f}\n"
+        f"优化空间: {(current_distance - optimal_distance)/current_distance*100:.2f}%"
     )
     ax2.text(0.5, 0.5, stats_text, ha='center', va='center', fontsize=12,
              bbox=dict(boxstyle='round,pad=0.5', fc='white', alpha=0.8))
@@ -329,7 +323,7 @@ def plot_route_analysis(initial_stats: dict, final_stats: dict):
     plt.show()
 
 def generate_summary(initial_stats: dict, dyt_stats: dict, final_stats: dict,
-                    total_distance: float, comparison_distance: float):
+                    current_distance: float, optimal_distance: float):
     """生成总结报告"""
     print("\n" + "=" * 80)
     print("配送路径规划总结报告")
@@ -339,13 +333,14 @@ def generate_summary(initial_stats: dict, dyt_stats: dict, final_stats: dict,
     improvement = (initial_stats['total_distance'] - final_stats['total_distance']) / initial_stats['total_distance'] * 100
     route_balance = np.std(final_stats['route_lengths']) / np.mean(final_stats['route_lengths'])
     delivery_balance = np.std(final_stats['num_deliveries']) / np.mean(final_stats['num_deliveries'])
+    depot_optimization_space = (current_distance - optimal_distance) / current_distance * 100
     
     print("\n1. 配送中心位置分析")
     print("-" * 50)
-    print(f"原始配送中心总距离: {total_distance:.2f}")
-    print(f"对照配送中心总距离: {comparison_distance:.2f}")
-    print(f"距离差异: {abs(total_distance - comparison_distance):.2f}")
-    print(f"差异百分比: {abs(total_distance - comparison_distance)/total_distance*100:.2f}%")
+    print(f"当前配送中心总距离: {current_distance:.2f}")
+    print(f"理论最优配送中心总距离: {optimal_distance:.2f}")
+    print(f"距离差异: {abs(current_distance - optimal_distance):.2f}")
+    print(f"优化空间: {depot_optimization_space:.2f}%")
     
     print("\n2. 路线优化效果")
     print("-" * 50)
@@ -378,10 +373,10 @@ def generate_summary(initial_stats: dict, dyt_stats: dict, final_stats: dict,
     
     print("\n6. 建议")
     print("-" * 50)
-    if total_distance < comparison_distance:
-        print("✓ 当前配送中心位置优于对照点，建议保持现有位置")
+    if depot_optimization_space > 5:
+        print(f"⚠ 当前配送中心位置存在较大优化空间（{depot_optimization_space:.2f}%），建议考虑更换位置")
     else:
-        print("⚠ 对照配送中心位置可能更优，建议考虑更换位置")
+        print("✓ 当前配送中心位置接近理论最优，可以保持现有位置")
     
     if improvement > 0:
         print(f"✓ 路线优化效果显著，节省了{improvement:.2f}%的总距离")
@@ -550,11 +545,10 @@ def main():
             print(f"DyT计算时间: {dyt_time:.2f} 秒")
             print(f"最终VRP计算时间: {vrp_time:.2f} 秒")
             
-            # 在绘制路线时计算总距离
-            total_distance = sum(np.sqrt((p[0] - depot[0])**2 + (p[1] - depot[1])**2) 
-                               for p in delivery_points)
-            comparison_distance = sum(np.sqrt((p[0] - (depot[0] + 20))**2 + (p[1] - depot[1])**2) 
-                                    for p in delivery_points)
+            # 计算最优配送中心位置和距离
+            optimal_depot = find_optimal_depot(delivery_points)
+            optimal_distance = calculate_total_distance(optimal_depot, delivery_points)
+            current_distance = calculate_total_distance(depot, delivery_points)
             
             # 添加计算时间到统计信息
             initial_stats['computation_time'] = vrp_time
@@ -569,7 +563,7 @@ def main():
             
             # 在程序结束前添加总结报告
             generate_summary(initial_stats, dyt_stats, final_stats, 
-                            total_distance, comparison_distance)
+                            current_distance, optimal_distance)
             
     except Exception as e:
         print(f"\n发生错误: {str(e)}")
